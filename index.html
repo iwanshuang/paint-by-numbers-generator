@@ -23,6 +23,14 @@
         </div>
 
         <div class="control-group">
+          <label for="savedTemplatesSelect">Saved templates</label>
+          <div class="inline-row">
+            <select id="savedTemplatesSelect" class="select-input small"></select>
+            <button id="saveTemplateBtn" class="ghost-btn" type="button">Save</button>
+          </div>
+        </div>
+
+        <div class="control-group">
           <label for="aspectRatioSelect">Output ratio</label>
           <select id="aspectRatioSelect" class="select-input">
             <option value="original">Original</option>
@@ -48,6 +56,23 @@
         <div class="control-group">
           <label for="fillProgress">Fill progress: <strong id="fillProgressValue">0%</strong></label>
           <input id="fillProgress" type="range" min="0" max="100" value="0" />
+        </div>
+
+        <div class="control-group color-filter-panel">
+          <label>Color filters</label>
+          <div class="filter-row">
+            <div class="filter-box">
+              <span>Preserve</span>
+              <input id="preserveColorInput" type="color" value="#ff7a59" />
+              <button id="addPreserveColorBtn" type="button">Add</button>
+            </div>
+            <div class="filter-box">
+              <span>Ignore</span>
+              <input id="ignoreColorInput" type="color" value="#0b0b0b" />
+              <button id="addIgnoreColorBtn" type="button">Add</button>
+            </div>
+          </div>
+          <div id="colorFilterList" class="filter-list"></div>
         </div>
 
         <div id="customPaletteSection" class="custom-palette-section">
