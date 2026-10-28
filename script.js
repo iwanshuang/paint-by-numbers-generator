@@ -6,10 +6,13 @@ const templateSelect = document.getElementById('templateSelect');
 const aspectRatioSelect = document.getElementById('aspectRatioSelect');
 const gridSizeInput = document.getElementById('gridSize');
 const paletteSizeInput = document.getElementById('paletteSize');
+const fillProgressInput = document.getElementById('fillProgress');
+const fillProgressValue = document.getElementById('fillProgressValue');
 const gridValue = document.getElementById('gridValue');
 const paletteValue = document.getElementById('paletteValue');
 const generateBtn = document.getElementById('generateBtn');
 const resetBtn = document.getElementById('resetBtn');
+const simulateFillBtn = document.getElementById('simulateFillBtn');
 const downloadBtn = document.getElementById('downloadBtn');
 const downloadSvgBtn = document.getElementById('downloadSvgBtn');
 const printBtn = document.getElementById('printBtn');
@@ -67,6 +70,10 @@ const state = {
   aspectRatio: '4:3',
   customPalette: [],
   palette: [],
+  cells: [],
+  fillProgress: 0,
+  isAnimating: false,
+  animationFrameId: null,
 };
 
 function clamp(value, min, max) {
@@ -136,6 +143,7 @@ function getPaletteOptions() {
 function updateLabels() {
   gridValue.textContent = state.gridSize;
   paletteValue.textContent = state.paletteSize;
+  fillProgressValue.textContent = `${Math.round(state.fillProgress * 100)}%`;
 }
 
 function renderTemplateSelector() {
@@ -162,6 +170,9 @@ function renderCustomPalette() {
     colorInput.title = `Color ${index + 1}`;
     colorInput.addEventListener('input', (event) => {
       state.customPalette[index] = event.target.value;
+      if (state.cells.length) {
+        renderPaintSheet(state.fillProgress);
+      }
       renderLegend();
     });
 
@@ -340,7 +351,8 @@ function buildCellAssignments() {
   if (!state.image) return [];
 
   const workingCanvas = createWorkingCanvas(state.image, paintCanvas.width, paintCanvas.height);
-  const { data, width, height } = workingCanvas.getContext('2d').getImageData(0, 0, workingCanvas.width, workingCanvas.height);
+  const imageData = workingCanvas.getContext('2d').getImageData(0, 0, workingCanvas.width, workingCanvas.height);
+  const { data, width, height } = imageData;
   const cellWidth = paintCanvas.width / state.gridSize;
   const cellHeight = paintCanvas.height / state.gridSize;
   const rows = Math.max(1, Math.ceil(height / cellHeight));
@@ -392,28 +404,36 @@ function buildCellAssignments() {
   return cells;
 }
 
-function drawNumberedSheet() {
+function renderPaintSheet(progressValue = state.fillProgress) {
   paintCtx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
   paintCtx.fillStyle = '#FFFFFF';
   paintCtx.fillRect(0, 0, paintCanvas.width, paintCanvas.height);
 
-  const cells = buildCellAssignments();
+  const cells = state.cells;
+  if (!cells || !cells.length) return;
 
-  for (const cell of cells) {
-    paintCtx.fillStyle = cell.fill;
+  const totalCells = cells.length;
+  const paintedCount = Math.round(progressValue * totalCells);
+
+  for (let index = 0; index < cells.length; index += 1) {
+    const cell = cells[index];
+    const isPainted = index < paintedCount;
+
+    paintCtx.fillStyle = isPainted ? cell.fill : '#FFFFFF';
     paintCtx.fillRect(cell.x, cell.y, cell.width, cell.height);
 
     paintCtx.strokeStyle = 'rgba(25, 36, 46, 0.25)';
     paintCtx.lineWidth = 1;
     paintCtx.strokeRect(cell.x, cell.y, cell.width, cell.height);
 
-    const textColor = (Number.parseInt(cell.fill.slice(1, 3), 16) + Number.parseInt(cell.fill.slice(3, 5), 16) + Number.parseInt(cell.fill.slice(5, 7), 16)) / 3 > 180 ? '#121212' : '#F8FBFF';
-
-    paintCtx.fillStyle = textColor;
-    paintCtx.font = `700 ${Math.max(10, cell.width * 0.42)}px sans-serif`;
-    paintCtx.textAlign = 'center';
-    paintCtx.textBaseline = 'middle';
-    paintCtx.fillText(String(cell.number), cell.x + cell.width / 2, cell.y + cell.height / 2);
+    if (isPainted) {
+      const textColor = (Number.parseInt(cell.fill.slice(1, 3), 16) + Number.parseInt(cell.fill.slice(3, 5), 16) + Number.parseInt(cell.fill.slice(5, 7), 16)) / 3 > 180 ? '#121212' : '#F8FBFF';
+      paintCtx.fillStyle = textColor;
+      paintCtx.font = `700 ${Math.max(10, cell.width * 0.42)}px sans-serif`;
+      paintCtx.textAlign = 'center';
+      paintCtx.textBaseline = 'middle';
+      paintCtx.fillText(String(cell.number), cell.x + cell.width / 2, cell.y + cell.height / 2);
+    }
   }
 }
 
@@ -431,9 +451,59 @@ function generatePaintSheet() {
     })
   );
 
+  state.cells = buildCellAssignments();
+  state.fillProgress = 0;
+  state.isAnimating = false;
+  fillProgressInput.value = '0';
+  updateLabels();
   renderLegend();
-  drawNumberedSheet();
+  renderPaintSheet(0);
   statusBox.textContent = `Generated ${state.gridSize} x ${state.gridSize} sheet for ${state.aspectRatio === 'original' ? 'original' : state.aspectRatio} output ratio using the ${getTemplateById(state.selectedTemplateId).name} palette.`;
+}
+
+function stopAnimation() {
+  if (state.animationFrameId) {
+    cancelAnimationFrame(state.animationFrameId);
+    state.animationFrameId = null;
+  }
+  state.isAnimating = false;
+  simulateFillBtn.textContent = 'Start Fill';
+}
+
+function startFillSimulation() {
+  if (!state.cells.length) return;
+
+  if (state.isAnimating) {
+    stopAnimation();
+    return;
+  }
+
+  state.isAnimating = true;
+  simulateFillBtn.textContent = 'Pause Fill';
+
+  const startProgress = state.fillProgress;
+  const startTime = performance.now();
+  const duration = 2200;
+
+  const tick = (time) => {
+    const elapsed = time - startTime;
+    const progress = clamp(elapsed / duration, 0, 1);
+    state.fillProgress = clamp(startProgress + progress, 0, 1);
+    fillProgressInput.value = String(Math.round(state.fillProgress * 100));
+    updateLabels();
+    renderPaintSheet(state.fillProgress);
+
+    if (state.fillProgress >= 1) {
+      state.isAnimating = false;
+      simulateFillBtn.textContent = 'Replay Fill';
+      state.animationFrameId = null;
+      return;
+    }
+
+    state.animationFrameId = requestAnimationFrame(tick);
+  };
+
+  state.animationFrameId = requestAnimationFrame(tick);
 }
 
 function processImageFile(file) {
@@ -468,6 +538,7 @@ function handleDrop(event) {
 }
 
 function resetToDefault() {
+  stopAnimation();
   state.selectedTemplateId = 'classic';
   state.customPalette = [...getTemplateById(state.selectedTemplateId).colors];
   state.aspectRatio = '4:3';
@@ -563,9 +634,28 @@ function attachEventHandlers() {
     updateLabels();
   });
 
+  fillProgressInput.addEventListener('input', (event) => {
+    stopAnimation();
+    const value = Number(event.target.value) / 100;
+    state.fillProgress = clamp(value, 0, 1);
+    updateLabels();
+    renderPaintSheet(state.fillProgress);
+  });
+
   addColorBtn.addEventListener('click', addCustomPaletteColor);
   generateBtn.addEventListener('click', generatePaintSheet);
   resetBtn.addEventListener('click', resetToDefault);
+  simulateFillBtn.addEventListener('click', () => {
+    if (state.isAnimating) {
+      stopAnimation();
+      return;
+    }
+    if (state.fillProgress >= 1) {
+      state.fillProgress = 0;
+      fillProgressInput.value = '0';
+    }
+    startFillSimulation();
+  });
   downloadBtn.addEventListener('click', exportPng);
   downloadSvgBtn.addEventListener('click', exportSvg);
   printBtn.addEventListener('click', () => window.print());
