@@ -17,6 +17,11 @@
         </label>
 
         <div class="control-group">
+          <label for="templateSelect">Color template</label>
+          <select id="templateSelect" class="select-input"></select>
+        </div>
+
+        <div class="control-group">
           <label for="gridSize">Grid size: <strong id="gridValue">20</strong></label>
           <input id="gridSize" type="range" min="8" max="60" value="20" />
         </div>
@@ -26,14 +31,26 @@
           <input id="paletteSize" type="range" min="3" max="16" value="8" />
         </div>
 
+        <div id="customPaletteSection" class="custom-palette-section">
+          <div class="custom-palette-header">
+            <h3>Custom palette</h3>
+            <button id="addColorBtn" class="ghost-btn" type="button">+ Add</button>
+          </div>
+          <div id="customPaletteList" class="custom-palette-list"></div>
+        </div>
+
         <div class="button-row">
-          <button id="generateBtn" class="primary">Generate</button>
-          <button id="resetBtn">Reset</button>
+          <button id="generateBtn" class="primary" type="button">Generate</button>
+          <button id="resetBtn" type="button">Reset</button>
         </div>
 
         <div class="button-row narrow">
-          <button id="downloadBtn">Download PNG</button>
-          <button id="printBtn">Print</button>
+          <button id="downloadBtn" type="button">Download PNG</button>
+          <button id="downloadSvgBtn" type="button">Download SVG</button>
+        </div>
+
+        <div class="button-row narrow">
+          <button id="printBtn" type="button">Print</button>
         </div>
 
         <div class="status-box" id="statusBox">Ready to create a paint-by-numbers sheet.</div>
