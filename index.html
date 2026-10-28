@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Paint by Numbers Generator</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="panel controls-panel">
+        <h1>Paint by Numbers</h1>
+
+        <label class="file-input">
+          <span>Upload image</span>
+          <input id="imageUpload" type="file" accept="image/*" />
+        </label>
+
+        <div class="control-group">
+          <label for="gridSize">Grid size: <strong id="gridValue">20</strong></label>
+          <input id="gridSize" type="range" min="8" max="60" value="20" />
+        </div>
+
+        <div class="control-group">
+          <label for="paletteSize">Palette colors: <strong id="paletteValue">8</strong></label>
+          <input id="paletteSize" type="range" min="3" max="16" value="8" />
+        </div>
+
+        <div class="button-row">
+          <button id="generateBtn" class="primary">Generate</button>
+          <button id="resetBtn">Reset</button>
+        </div>
+
+        <div class="button-row narrow">
+          <button id="downloadBtn">Download PNG</button>
+          <button id="printBtn">Print</button>
+        </div>
+
+        <div class="status-box" id="statusBox">Ready to create a paint-by-numbers sheet.</div>
+      </aside>
+
+      <main class="panel preview-panel">
+        <div class="canvas-wrapper">
+          <h2>Original</h2>
+          <canvas id="sourceCanvas" width="640" height="420"></canvas>
+        </div>
+
+        <div class="canvas-wrapper">
+          <h2>Paint-by-Numbers Sheet</h2>
+          <canvas id="paintCanvas" width="640" height="420"></canvas>
+        </div>
+      </main>
+
+      <aside class="panel legend-panel">
+        <h2>Color key</h2>
+        <div id="paletteLegend" class="legend"></div>
+      </aside>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
