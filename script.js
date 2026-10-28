@@ -3,6 +3,8 @@ const paintCanvas = document.getElementById('paintCanvas');
 const imageUpload = document.getElementById('imageUpload');
 const dropZone = document.getElementById('dropZone');
 const templateSelect = document.getElementById('templateSelect');
+const savedTemplatesSelect = document.getElementById('savedTemplatesSelect');
+const saveTemplateBtn = document.getElementById('saveTemplateBtn');
 const aspectRatioSelect = document.getElementById('aspectRatioSelect');
 const gridSizeInput = document.getElementById('gridSize');
 const paletteSizeInput = document.getElementById('paletteSize');
@@ -20,39 +22,24 @@ const statusBox = document.getElementById('statusBox');
 const paletteLegend = document.getElementById('paletteLegend');
 const customPaletteList = document.getElementById('customPaletteList');
 const addColorBtn = document.getElementById('addColorBtn');
+const colorFilterList = document.getElementById('colorFilterList');
+const preserveColorInput = document.getElementById('preserveColorInput');
+const ignoreColorInput = document.getElementById('ignoreColorInput');
+const addPreserveColorBtn = document.getElementById('addPreserveColorBtn');
+const addIgnoreColorBtn = document.getElementById('addIgnoreColorBtn');
 
 const sourceCtx = sourceCanvas.getContext('2d');
 const paintCtx = paintCanvas.getContext('2d');
 
-const templates = [
-  {
-    id: 'classic',
-    name: 'Classic 8',
-    colors: ['#F5F1E6', '#D4D4D4', '#8A8A8A', '#2F3134', '#D96F3D', '#EBCB5D', '#72A874', '#4D7FB8', '#A978C8'],
-  },
-  {
-    id: 'earth',
-    name: 'Earth Tones',
-    colors: ['#F1E6D0', '#D9B684', '#B57A4A', '#7D563B', '#4D3A35', '#899F79', '#A2C2A9', '#E7D29E'],
-  },
-  {
-    id: 'pastel',
-    name: 'Pastel Bloom',
-    colors: ['#F8F3FF', '#D9C8F0', '#F8B8C4', '#F8D9A0', '#B9E6B1', '#8FD3E6', '#7DB9D6', '#F7A6A6'],
-  },
-  {
-    id: 'neon',
-    name: 'Neon Pop',
-    colors: ['#F8F7FF', '#18C5FF', '#FF4C8B', '#FFD12A', '#31E981', '#8E6BFF', '#FF8C42', '#F7F9FF'],
-  },
-  {
-    id: 'monochrome',
-    name: 'Monochrome',
-    colors: ['#FAFAFA', '#D9D9D9', '#B7B7B7', '#8D8D8D', '#636363', '#3B3B3B', '#1F1F1F', '#0A0A0A'],
-  },
+const COLOR_TEMPLATES = [
+  { id: 'classic', name: 'Classic 8', colors: ['#F5F1E6', '#D4D4D4', '#8A8A8A', '#2F3134', '#D96F3D', '#EBCB5D', '#72A874', '#4D7FB8', '#A978C8'] },
+  { id: 'earth', name: 'Earth Tones', colors: ['#F1E6D0', '#D9B684', '#B57A4A', '#7D563B', '#4D3A35', '#899F79', '#A2C2A9', '#E7D29E'] },
+  { id: 'pastel', name: 'Pastel Bloom', colors: ['#F8F3FF', '#D9C8F0', '#F8B8C4', '#F8D9A0', '#B9E6B1', '#8FD3E6', '#7DB9D6', '#F7A6A6'] },
+  { id: 'neon', name: 'Neon Pop', colors: ['#F8F7FF', '#18C5FF', '#FF4C8B', '#FFD12A', '#31E981', '#8E6BFF', '#FF8C42', '#F7A6A6'] },
+  { id: 'monochrome', name: 'Monochrome', colors: ['#FAFAFA', '#D9D9D9', '#B7B7B7', '#8D8D8D', '#636363', '#3B3B3B', '#1F1F1F', '#0A0A0A'] },
 ];
 
-const aspectRatios = {
+const ASPECT_RATIOS = {
   original: null,
   '1:1': 1,
   '4:3': 4 / 3,
@@ -74,6 +61,9 @@ const state = {
   fillProgress: 0,
   isAnimating: false,
   animationFrameId: null,
+  savedTemplates: [...COLOR_TEMPLATES],
+  preservedColors: [],
+  ignoredColors: [],
 };
 
 function clamp(value, min, max) {
@@ -92,12 +82,12 @@ function rgbToHex(r, g, b) {
 function hexToRgb(hex) {
   const normalized = hex.replace('#', '');
   const full = normalized.length === 3 ? normalized.split('').map((char) => char + char).join('') : normalized;
-  const value = Number.parseInt(full, 16);
+  const int = Number.parseInt(full, 16);
 
   return {
-    r: (value >> 16) & 255,
-    g: (value >> 8) & 255,
-    b: value & 255,
+    r: (int >> 16) & 255,
+    g: (int >> 8) & 255,
+    b: int & 255,
   };
 }
 
@@ -133,7 +123,7 @@ function createRandomHex() {
 }
 
 function getTemplateById(id) {
-  return templates.find((template) => template.id === id) || templates[0];
+  return state.savedTemplates.find((template) => template.id === id) || COLOR_TEMPLATES.find((template) => template.id === id) || COLOR_TEMPLATES[0];
 }
 
 function getPaletteOptions() {
@@ -147,15 +137,22 @@ function updateLabels() {
 }
 
 function renderTemplateSelector() {
-  templateSelect.innerHTML = templates
+  templateSelect.innerHTML = COLOR_TEMPLATES.map((template) => `<option value="${template.id}">${template.name}</option>`).join('');
+  templateSelect.value = state.selectedTemplateId;
+}
+
+function renderSavedTemplates() {
+  savedTemplatesSelect.innerHTML = state.savedTemplates
     .map((template) => `<option value="${template.id}">${template.name}</option>`)
     .join('');
-  templateSelect.value = state.selectedTemplateId;
+
+  if (!state.savedTemplates.length) {
+    savedTemplatesSelect.innerHTML = '<option value="">No saved templates</option>';
+  }
 }
 
 function renderCustomPalette() {
   customPaletteList.innerHTML = '';
-
   if (!state.customPalette.length) {
     state.customPalette = [...getTemplateById(state.selectedTemplateId).colors];
   }
@@ -170,9 +167,6 @@ function renderCustomPalette() {
     colorInput.title = `Color ${index + 1}`;
     colorInput.addEventListener('input', (event) => {
       state.customPalette[index] = event.target.value;
-      if (state.cells.length) {
-        renderPaintSheet(state.fillProgress);
-      }
       renderLegend();
     });
 
@@ -214,8 +208,102 @@ function addCustomPaletteColor() {
   renderLegend();
 }
 
+function saveCurrentTemplate() {
+  const name = prompt('Template name', `Custom-${state.savedTemplates.length + 1}`);
+  if (!name) return;
+
+  state.savedTemplates.push({
+    id: `custom-${Date.now()}`,
+    name,
+    colors: [...state.customPalette],
+  });
+  renderSavedTemplates();
+  savedTemplatesSelect.value = state.savedTemplates[state.savedTemplates.length - 1].id;
+  statusBox.textContent = `Saved template: ${name}`;
+}
+
+function addColorFilter(type, value) {
+  const hex = value.toUpperCase();
+  const list = type === 'preserve' ? state.preservedColors : state.ignoredColors;
+  if (!list.includes(hex)) {
+    list.push(hex);
+    renderColorFilters();
+  }
+}
+
+function removeColorFilter(type, value) {
+  const list = type === 'preserve' ? state.preservedColors : state.ignoredColors;
+  const next = list.filter((item) => item !== value);
+  if (type === 'preserve') state.preservedColors = next;
+  else state.ignoredColors = next;
+  renderColorFilters();
+}
+
+function renderColorFilters() {
+  colorFilterList.innerHTML = '';
+
+  const groups = [
+    { title: 'Preserved', values: state.preservedColors, type: 'preserve' },
+    { title: 'Ignored', values: state.ignoredColors, type: 'ignore' },
+  ];
+
+  groups.forEach((group) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'filter-group';
+
+    const title = document.createElement('strong');
+    title.textContent = group.title;
+    wrap.appendChild(title);
+
+    const row = document.createElement('div');
+    row.className = 'filter-tag-row';
+
+    if (!group.values.length) {
+      const empty = document.createElement('span');
+      empty.className = 'empty-tag';
+      empty.textContent = 'None';
+      row.appendChild(empty);
+    } else {
+      group.values.forEach((value) => {
+        const tag = document.createElement('span');
+        tag.className = 'filter-tag';
+        tag.innerHTML = `<span class="dot" style="background:${value}"></span><span>${value}</span><button type="button" data-type="${group.type}" data-value="${value}">×</button>`;
+        row.appendChild(tag);
+      });
+    }
+
+    wrap.appendChild(row);
+    colorFilterList.appendChild(wrap);
+  });
+
+  colorFilterList.querySelectorAll('button[data-type]').forEach((button) => {
+    button.addEventListener('click', () => {
+      removeColorFilter(button.dataset.type, button.dataset.value);
+    });
+  });
+}
+
+function hexMatchesFilter(hex, list) {
+  return list.some((value) => value.toUpperCase() === hex.toUpperCase());
+}
+
+function getFilteredPaletteColors() {
+  const sourcePalette = getPaletteOptions();
+  const filtered = sourcePalette.filter((hex) => {
+    if (state.preservedColors.length && !hexMatchesFilter(hex, state.preservedColors)) {
+      return false;
+    }
+    if (hexMatchesFilter(hex, state.ignoredColors)) {
+      return false;
+    }
+    return true;
+  });
+
+  return filtered.length ? filtered : sourcePalette;
+}
+
 function getAspectRatio() {
-  return aspectRatios[state.aspectRatio] || null;
+  return ASPECT_RATIOS[state.aspectRatio] || null;
 }
 
 function computeCropRect(image, ratio) {
@@ -226,50 +314,40 @@ function computeCropRect(image, ratio) {
   const imageRatio = image.width / image.height;
   if (imageRatio > ratio) {
     const cropWidth = image.height * ratio;
-    return {
-      x: (image.width - cropWidth) / 2,
-      y: 0,
-      width: cropWidth,
-      height: image.height,
-    };
+    return { x: (image.width - cropWidth) / 2, y: 0, width: cropWidth, height: image.height };
   }
 
   const cropHeight = image.width / ratio;
-  return {
-    x: 0,
-    y: (image.height - cropHeight) / 2,
-    width: image.width,
-    height: cropHeight,
-  };
+  return { x: 0, y: (image.height - cropHeight) / 2, width: image.width, height: cropHeight };
 }
 
 function createWorkingCanvas(image, targetWidth, targetHeight) {
   const ratio = getAspectRatio();
   const crop = computeCropRect(image, ratio);
 
-  const sourceCanvasBuffer = document.createElement('canvas');
-  sourceCanvasBuffer.width = Math.max(1, Math.round(crop.width));
-  sourceCanvasBuffer.height = Math.max(1, Math.round(crop.height));
+  const buffer = document.createElement('canvas');
+  buffer.width = Math.max(1, Math.round(crop.width));
+  buffer.height = Math.max(1, Math.round(crop.height));
 
-  const bufferCtx = sourceCanvasBuffer.getContext('2d');
-  bufferCtx.drawImage(image, crop.x, crop.y, crop.width, crop.height, 0, 0, sourceCanvasBuffer.width, sourceCanvasBuffer.height);
+  const ctx = buffer.getContext('2d');
+  ctx.drawImage(image, crop.x, crop.y, crop.width, crop.height, 0, 0, buffer.width, buffer.height);
 
-  const outputCanvas = document.createElement('canvas');
-  outputCanvas.width = targetWidth;
-  outputCanvas.height = targetHeight;
+  const output = document.createElement('canvas');
+  output.width = targetWidth;
+  output.height = targetHeight;
 
-  const outputCtx = outputCanvas.getContext('2d');
+  const outputCtx = output.getContext('2d');
   outputCtx.fillStyle = '#FFFFFF';
   outputCtx.fillRect(0, 0, targetWidth, targetHeight);
 
-  const scale = Math.min(targetWidth / sourceCanvasBuffer.width, targetHeight / sourceCanvasBuffer.height);
-  const drawWidth = sourceCanvasBuffer.width * scale;
-  const drawHeight = sourceCanvasBuffer.height * scale;
+  const scale = Math.min(targetWidth / buffer.width, targetHeight / buffer.height);
+  const drawWidth = buffer.width * scale;
+  const drawHeight = buffer.height * scale;
   const offsetX = (targetWidth - drawWidth) / 2;
   const offsetY = (targetHeight - drawHeight) / 2;
 
-  outputCtx.drawImage(sourceCanvasBuffer, offsetX, offsetY, drawWidth, drawHeight);
-  return outputCanvas;
+  outputCtx.drawImage(buffer, offsetX, offsetY, drawWidth, drawHeight);
+  return output;
 }
 
 function drawSourcePreview(image) {
@@ -302,7 +380,6 @@ function nearestColor(target, palette) {
 
   let selected = palette[0];
   let shortest = Number.POSITIVE_INFINITY;
-
   for (const color of palette) {
     const dist = colorDistance(target, color);
     if (dist < shortest) {
@@ -310,7 +387,6 @@ function nearestColor(target, palette) {
       shortest = dist;
     }
   }
-
   return selected;
 }
 
@@ -323,7 +399,6 @@ function fillPaletteToSize(palette) {
 
 function renderLegend() {
   paletteLegend.innerHTML = '';
-
   state.palette.forEach((color, index) => {
     const item = document.createElement('div');
     item.className = 'legend-item';
@@ -388,16 +463,8 @@ function buildCellAssignments() {
       };
 
       const nearest = nearestColor(avg, state.palette);
-      const cellNumber = state.palette.findIndex((color) => color.r === nearest.r && color.g === nearest.g && color.b === nearest.b) + 1;
-
-      cells.push({
-        x: x0,
-        y: y0,
-        width: cellWidth,
-        height: cellHeight,
-        fill: rgbToHex(nearest.r, nearest.g, nearest.b),
-        number: cellNumber,
-      });
+      const number = state.palette.findIndex((color) => color.r === nearest.r && color.g === nearest.g && color.b === nearest.b) + 1;
+      cells.push({ x: x0, y: y0, width: cellWidth, height: cellHeight, fill: rgbToHex(nearest.r, nearest.g, nearest.b), number });
     }
   }
 
@@ -409,14 +476,13 @@ function renderPaintSheet(progressValue = state.fillProgress) {
   paintCtx.fillStyle = '#FFFFFF';
   paintCtx.fillRect(0, 0, paintCanvas.width, paintCanvas.height);
 
-  const cells = state.cells;
-  if (!cells || !cells.length) return;
+  if (!state.cells.length) return;
 
-  const totalCells = cells.length;
+  const totalCells = state.cells.length;
   const paintedCount = Math.round(progressValue * totalCells);
 
-  for (let index = 0; index < cells.length; index += 1) {
-    const cell = cells[index];
+  for (let index = 0; index < state.cells.length; index += 1) {
+    const cell = state.cells[index];
     const isPainted = index < paintedCount;
 
     paintCtx.fillStyle = isPainted ? cell.fill : '#FFFFFF';
@@ -443,9 +509,10 @@ function generatePaintSheet() {
     return;
   }
 
-  const templateColors = getPaletteOptions();
+  const filteredPalette = getFilteredPaletteColors();
+  const paletteColors = filteredPalette.length ? filteredPalette : getPaletteOptions();
   state.palette = fillPaletteToSize(
-    templateColors.map((hex) => {
+    paletteColors.map((hex) => {
       const { r, g, b } = hexToRgb(hex);
       return { r, g, b };
     })
@@ -542,17 +609,21 @@ function resetToDefault() {
   state.selectedTemplateId = 'classic';
   state.customPalette = [...getTemplateById(state.selectedTemplateId).colors];
   state.aspectRatio = '4:3';
+  state.preservedColors = [];
+  state.ignoredColors = [];
   aspectRatioSelect.value = state.aspectRatio;
   renderTemplateSelector();
   renderCustomPalette();
+  renderColorFilters();
 
   const image = new Image();
   image.onload = () => {
     state.image = image;
     drawSourcePreview(image);
     generatePaintSheet();
-    statusBox.textContent = 'Default sample loaded. Adjust the palette or crop ratio to regenerate the numbered sheet.';
+    statusBox.textContent = 'Default sample loaded. Adjust the palette, filters, or crop ratio to regenerate the numbered sheet.';
   };
+
   image.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYAAAAFICAYAAAAHn7J1AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJ0UkGAAAAAElFTkSuQmCC';
 }
 
@@ -574,17 +645,15 @@ function exportSvg() {
   const svgMarkup = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${paintCanvas.width}" height="${paintCanvas.height}" viewBox="0 0 ${paintCanvas.width} ${paintCanvas.height}">
       <rect width="100%" height="100%" fill="#FFFFFF" />
-      ${cells
-        .map((cell) => {
-          const fontSize = Math.max(10, cell.width * 0.42);
-          const fill = cell.fill;
-          const textColor = (Number.parseInt(fill.slice(1, 3), 16) + Number.parseInt(fill.slice(3, 5), 16) + Number.parseInt(fill.slice(5, 7), 16)) / 3 > 180 ? '#121212' : '#F8FBFF';
-          return `
-            <rect x="${cell.x}" y="${cell.y}" width="${cell.width}" height="${cell.height}" fill="${fill}" stroke="rgba(25,36,46,0.25)" stroke-width="1" />
-            <text x="${cell.x + cell.width / 2}" y="${cell.y + cell.height / 2}" text-anchor="middle" dominant-baseline="middle" font-size="${fontSize}" font-family="Arial, sans-serif" font-weight="700" fill="${textColor}">${cell.number}</text>
-          `;
-        })
-        .join('')}
+      ${cells.map((cell) => {
+        const fontSize = Math.max(10, cell.width * 0.42);
+        const fill = cell.fill;
+        const textColor = (Number.parseInt(fill.slice(1, 3), 16) + Number.parseInt(fill.slice(3, 5), 16) + Number.parseInt(fill.slice(5, 7), 16)) / 3 > 180 ? '#121212' : '#F8FBFF';
+        return `
+          <rect x="${cell.x}" y="${cell.y}" width="${cell.width}" height="${cell.height}" fill="${fill}" stroke="rgba(25,36,46,0.25)" stroke-width="1" />
+          <text x="${cell.x + cell.width / 2}" y="${cell.y + cell.height / 2}" text-anchor="middle" dominant-baseline="middle" font-size="${fontSize}" font-family="Arial, sans-serif" font-weight="700" fill="${textColor}">${cell.number}</text>
+        `;
+      }).join('')}
     </svg>
   `;
 
@@ -616,6 +685,20 @@ function attachEventHandlers() {
     generatePaintSheet();
   });
 
+  savedTemplatesSelect.addEventListener('change', (event) => {
+    const id = event.target.value;
+    if (!id) return;
+    const template = state.savedTemplates.find((item) => item.id === id);
+    if (!template) return;
+    state.selectedTemplateId = template.id;
+    state.customPalette = [...template.colors];
+    renderCustomPalette();
+    renderLegend();
+    statusBox.textContent = `Loaded saved template: ${template.name}`;
+  });
+
+  saveTemplateBtn.addEventListener('click', saveCurrentTemplate);
+
   aspectRatioSelect.addEventListener('change', (event) => {
     state.aspectRatio = event.target.value;
     if (state.image) {
@@ -642,20 +725,18 @@ function attachEventHandlers() {
     renderPaintSheet(state.fillProgress);
   });
 
+  addPreserveColorBtn.addEventListener('click', () => {
+    addColorFilter('preserve', preserveColorInput.value);
+  });
+
+  addIgnoreColorBtn.addEventListener('click', () => {
+    addColorFilter('ignore', ignoreColorInput.value);
+  });
+
   addColorBtn.addEventListener('click', addCustomPaletteColor);
   generateBtn.addEventListener('click', generatePaintSheet);
   resetBtn.addEventListener('click', resetToDefault);
-  simulateFillBtn.addEventListener('click', () => {
-    if (state.isAnimating) {
-      stopAnimation();
-      return;
-    }
-    if (state.fillProgress >= 1) {
-      state.fillProgress = 0;
-      fillProgressInput.value = '0';
-    }
-    startFillSimulation();
-  });
+  simulateFillBtn.addEventListener('click', () => startFillSimulation());
   downloadBtn.addEventListener('click', exportPng);
   downloadSvgBtn.addEventListener('click', exportSvg);
   printBtn.addEventListener('click', () => window.print());
@@ -665,7 +746,9 @@ function init() {
   state.customPalette = [...getTemplateById(state.selectedTemplateId).colors];
   state.paletteSize = state.customPalette.length;
   renderTemplateSelector();
+  renderSavedTemplates();
   renderCustomPalette();
+  renderColorFilters();
   updateLabels();
   attachEventHandlers();
   resetToDefault();
