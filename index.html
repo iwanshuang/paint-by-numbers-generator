@@ -11,14 +11,28 @@
       <aside class="panel controls-panel">
         <h1>Paint by Numbers</h1>
 
-        <label class="file-input">
-          <span>Upload image</span>
+        <label id="dropZone" class="drop-zone" for="imageUpload">
+          <span class="drop-zone-title">Drop image here</span>
+          <span class="drop-zone-subtitle">or click to browse</span>
           <input id="imageUpload" type="file" accept="image/*" />
         </label>
 
         <div class="control-group">
           <label for="templateSelect">Color template</label>
           <select id="templateSelect" class="select-input"></select>
+        </div>
+
+        <div class="control-group">
+          <label for="aspectRatioSelect">Output ratio</label>
+          <select id="aspectRatioSelect" class="select-input">
+            <option value="original">Original</option>
+            <option value="1:1">1:1</option>
+            <option value="4:3" selected>4:3</option>
+            <option value="3:2">3:2</option>
+            <option value="16:9">16:9</option>
+            <option value="9:16">9:16</option>
+            <option value="2:3">2:3</option>
+          </select>
         </div>
 
         <div class="control-group">
@@ -29,6 +43,11 @@
         <div class="control-group">
           <label for="paletteSize">Palette colors: <strong id="paletteValue">8</strong></label>
           <input id="paletteSize" type="range" min="3" max="16" value="8" />
+        </div>
+
+        <div class="control-group">
+          <label for="fillProgress">Fill progress: <strong id="fillProgressValue">0%</strong></label>
+          <input id="fillProgress" type="range" min="0" max="100" value="0" />
         </div>
 
         <div id="customPaletteSection" class="custom-palette-section">
@@ -45,11 +64,12 @@
         </div>
 
         <div class="button-row narrow">
+          <button id="simulateFillBtn" type="button">Start Fill</button>
           <button id="downloadBtn" type="button">Download PNG</button>
-          <button id="downloadSvgBtn" type="button">Download SVG</button>
         </div>
 
         <div class="button-row narrow">
+          <button id="downloadSvgBtn" type="button">Download SVG</button>
           <button id="printBtn" type="button">Print</button>
         </div>
 
