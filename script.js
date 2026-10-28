@@ -1,7 +1,9 @@
 const sourceCanvas = document.getElementById('sourceCanvas');
 const paintCanvas = document.getElementById('paintCanvas');
 const imageUpload = document.getElementById('imageUpload');
+const dropZone = document.getElementById('dropZone');
 const templateSelect = document.getElementById('templateSelect');
+const aspectRatioSelect = document.getElementById('aspectRatioSelect');
 const gridSizeInput = document.getElementById('gridSize');
 const paletteSizeInput = document.getElementById('paletteSize');
 const gridValue = document.getElementById('gridValue');
@@ -47,11 +49,22 @@ const templates = [
   },
 ];
 
+const aspectRatios = {
+  original: null,
+  '1:1': 1,
+  '4:3': 4 / 3,
+  '3:2': 3 / 2,
+  '16:9': 16 / 9,
+  '9:16': 9 / 16,
+  '2:3': 2 / 3,
+};
+
 const state = {
   image: null,
   gridSize: 20,
   paletteSize: 8,
   selectedTemplateId: 'classic',
+  aspectRatio: '4:3',
   customPalette: [],
   palette: [],
 };
@@ -184,83 +197,93 @@ function renderCustomPalette() {
   });
 }
 
-function resetCustomPaletteToTemplate() {
-  state.customPalette = [...getTemplateById(state.selectedTemplateId).colors];
-  renderCustomPalette();
-  renderLegend();
-}
-
 function addCustomPaletteColor() {
   state.customPalette.push(createRandomHex());
   renderCustomPalette();
   renderLegend();
 }
 
-function getCanvasData(image, targetWidth = 480, targetHeight = 320) {
-  const tempCanvas = document.createElement('canvas');
-  const tempCtx = tempCanvas.getContext('2d');
-
-  const ratio = Math.min(targetWidth / image.width, targetHeight / image.height);
-  const drawWidth = image.width * ratio;
-  const drawHeight = image.height * ratio;
-
-  tempCanvas.width = Math.max(1, Math.round(drawWidth));
-  tempCanvas.height = Math.max(1, Math.round(drawHeight));
-
-  tempCtx.drawImage(image, 0, 0, tempCanvas.width, tempCanvas.height);
-  return tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+function getAspectRatio() {
+  return aspectRatios[state.aspectRatio] || null;
 }
 
-function createDemoImage() {
-  const demoCanvas = document.createElement('canvas');
-  const demoCtx = demoCanvas.getContext('2d');
-  const width = 900;
-  const height = 620;
-
-  demoCanvas.width = width;
-  demoCanvas.height = height;
-
-  const grad = demoCtx.createLinearGradient(0, 0, width, height);
-  grad.addColorStop(0, '#F6D365');
-  grad.addColorStop(0.35, '#FDA085');
-  grad.addColorStop(0.7, '#7DD3FC');
-  grad.addColorStop(1, '#C4B5FD');
-  demoCtx.fillStyle = grad;
-  demoCtx.fillRect(0, 0, width, height);
-
-  demoCtx.fillStyle = '#33A1FF';
-  demoCtx.beginPath();
-  demoCtx.arc(width * 0.25, height * 0.6, 150, 0, Math.PI * 2);
-  demoCtx.fill();
-
-  demoCtx.fillStyle = '#7EE787';
-  demoCtx.fillRect(width * 0.45, height * 0.18, 220, 200);
-
-  demoCtx.fillStyle = '#FF6B6B';
-  demoCtx.beginPath();
-  demoCtx.moveTo(width * 0.72, height * 0.22);
-  demoCtx.lineTo(width * 0.92, height * 0.62);
-  demoCtx.lineTo(width * 0.62, height * 0.68);
-  demoCtx.closePath();
-  demoCtx.fill();
-
-  demoCtx.fillStyle = '#FFF7D6';
-  demoCtx.font = 'bold 74px sans-serif';
-  demoCtx.fillText('PAINT', width * 0.12, height * 0.75);
-
-  demoCtx.fillStyle = 'rgba(0,0,0,0.18)';
-  for (let i = 0; i < 80; i += 1) {
-    demoCtx.fillRect(Math.random() * width, Math.random() * height, 8, 8);
+function computeCropRect(image, ratio) {
+  if (!ratio) {
+    return { x: 0, y: 0, width: image.width, height: image.height };
   }
 
-  return demoCanvas;
+  const imageRatio = image.width / image.height;
+  if (imageRatio > ratio) {
+    const cropWidth = image.height * ratio;
+    return {
+      x: (image.width - cropWidth) / 2,
+      y: 0,
+      width: cropWidth,
+      height: image.height,
+    };
+  }
+
+  const cropHeight = image.width / ratio;
+  return {
+    x: 0,
+    y: (image.height - cropHeight) / 2,
+    width: image.width,
+    height: cropHeight,
+  };
 }
 
-function defaultImage() {
-  const demoCanvas = createDemoImage();
-  const image = new Image();
-  image.src = demoCanvas.toDataURL('image/png');
-  return image;
+function createWorkingCanvas(image, targetWidth, targetHeight) {
+  const ratio = getAspectRatio();
+  const crop = computeCropRect(image, ratio);
+
+  const sourceCanvasBuffer = document.createElement('canvas');
+  sourceCanvasBuffer.width = Math.max(1, Math.round(crop.width));
+  sourceCanvasBuffer.height = Math.max(1, Math.round(crop.height));
+
+  const bufferCtx = sourceCanvasBuffer.getContext('2d');
+  bufferCtx.drawImage(image, crop.x, crop.y, crop.width, crop.height, 0, 0, sourceCanvasBuffer.width, sourceCanvasBuffer.height);
+
+  const outputCanvas = document.createElement('canvas');
+  outputCanvas.width = targetWidth;
+  outputCanvas.height = targetHeight;
+
+  const outputCtx = outputCanvas.getContext('2d');
+  outputCtx.fillStyle = '#FFFFFF';
+  outputCtx.fillRect(0, 0, targetWidth, targetHeight);
+
+  const scale = Math.min(targetWidth / sourceCanvasBuffer.width, targetHeight / sourceCanvasBuffer.height);
+  const drawWidth = sourceCanvasBuffer.width * scale;
+  const drawHeight = sourceCanvasBuffer.height * scale;
+  const offsetX = (targetWidth - drawWidth) / 2;
+  const offsetY = (targetHeight - drawHeight) / 2;
+
+  outputCtx.drawImage(sourceCanvasBuffer, offsetX, offsetY, drawWidth, drawHeight);
+  return outputCanvas;
+}
+
+function drawSourcePreview(image) {
+  const ratio = getAspectRatio();
+  const crop = computeCropRect(image, ratio);
+  const previewCanvas = document.createElement('canvas');
+  previewCanvas.width = image.width;
+  previewCanvas.height = image.height;
+
+  const previewCtx = previewCanvas.getContext('2d');
+  previewCtx.drawImage(image, crop.x, crop.y, crop.width, crop.height, 0, 0, previewCanvas.width, previewCanvas.height);
+
+  const width = sourceCanvas.width;
+  const height = sourceCanvas.height;
+  sourceCtx.clearRect(0, 0, width, height);
+  sourceCtx.fillStyle = '#F2F5F9';
+  sourceCtx.fillRect(0, 0, width, height);
+
+  const scale = Math.min(width / previewCanvas.width, height / previewCanvas.height);
+  const drawWidth = previewCanvas.width * scale;
+  const drawHeight = previewCanvas.height * scale;
+  const x = (width - drawWidth) / 2;
+  const y = (height - drawHeight) / 2;
+
+  sourceCtx.drawImage(previewCanvas, x, y, drawWidth, drawHeight);
 }
 
 function nearestColor(target, palette) {
@@ -278,14 +301,6 @@ function nearestColor(target, palette) {
   }
 
   return selected;
-}
-
-function buildPaletteFromTemplate() {
-  const templateColors = getPaletteOptions();
-  return templateColors.slice(0, Math.max(3, Math.min(state.paletteSize, templateColors.length))).map((hex) => {
-    const { r, g, b } = hexToRgb(hex);
-    return { r, g, b };
-  });
 }
 
 function fillPaletteToSize(palette) {
@@ -321,27 +336,11 @@ function renderLegend() {
   });
 }
 
-function drawSourcePreview(image) {
-  const width = sourceCanvas.width;
-  const height = sourceCanvas.height;
-  sourceCtx.clearRect(0, 0, width, height);
-
-  const ratio = Math.min(width / image.width, height / image.height);
-  const drawWidth = image.width * ratio;
-  const drawHeight = image.height * ratio;
-  const x = (width - drawWidth) / 2;
-  const y = (height - drawHeight) / 2;
-
-  sourceCtx.fillStyle = '#F2F5F9';
-  sourceCtx.fillRect(0, 0, width, height);
-  sourceCtx.drawImage(image, x, y, drawWidth, drawHeight);
-}
-
 function buildCellAssignments() {
   if (!state.image) return [];
 
-  const imageData = getCanvasData(state.image, paintCanvas.width, paintCanvas.height);
-  const { data, width, height } = imageData;
+  const workingCanvas = createWorkingCanvas(state.image, paintCanvas.width, paintCanvas.height);
+  const { data, width, height } = workingCanvas.getContext('2d').getImageData(0, 0, workingCanvas.width, workingCanvas.height);
   const cellWidth = paintCanvas.width / state.gridSize;
   const cellHeight = paintCanvas.height / state.gridSize;
   const rows = Math.max(1, Math.ceil(height / cellHeight));
@@ -434,39 +433,56 @@ function generatePaintSheet() {
 
   renderLegend();
   drawNumberedSheet();
-  statusBox.textContent = `Generated ${state.gridSize} x ${state.gridSize} region sheet using the ${getTemplateById(state.selectedTemplateId).name} palette.`;
+  statusBox.textContent = `Generated ${state.gridSize} x ${state.gridSize} sheet for ${state.aspectRatio === 'original' ? 'original' : state.aspectRatio} output ratio using the ${getTemplateById(state.selectedTemplateId).name} palette.`;
 }
 
-function loadImageFromObject(image) {
-  state.image = image;
-  drawSourcePreview(image);
-  generatePaintSheet();
+function processImageFile(file) {
+  if (!file || !file.type.startsWith('image/')) {
+    statusBox.textContent = 'Please choose a valid image file.';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    const image = new Image();
+    image.onload = () => {
+      state.image = image;
+      drawSourcePreview(image);
+      generatePaintSheet();
+    };
+    image.src = event.target.result;
+  };
+  reader.readAsDataURL(file);
 }
 
 function handleUpload(event) {
   const [file] = event.target.files;
-  if (!file) return;
+  if (file) processImageFile(file);
+}
 
-  const reader = new FileReader();
-  reader.onload = (loadEvent) => {
-    const image = new Image();
-    image.onload = () => loadImageFromObject(image);
-    image.src = loadEvent.target.result;
-  };
-  reader.readAsDataURL(file);
+function handleDrop(event) {
+  event.preventDefault();
+  dropZone.classList.remove('dragover');
+  const [file] = event.dataTransfer.files;
+  if (file) processImageFile(file);
 }
 
 function resetToDefault() {
   state.selectedTemplateId = 'classic';
   state.customPalette = [...getTemplateById(state.selectedTemplateId).colors];
+  state.aspectRatio = '4:3';
+  aspectRatioSelect.value = state.aspectRatio;
   renderTemplateSelector();
   renderCustomPalette();
 
-  const image = defaultImage();
+  const image = new Image();
   image.onload = () => {
-    loadImageFromObject(image);
-    statusBox.textContent = 'Default sample loaded. Adjust the palette or grid to regenerate the numbered sheet.';
+    state.image = image;
+    drawSourcePreview(image);
+    generatePaintSheet();
+    statusBox.textContent = 'Default sample loaded. Adjust the palette or crop ratio to regenerate the numbered sheet.';
   };
+  image.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYAAAAFICAYAAAAHn7J1AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJ0UkGAAAAAElFTkSuQmCC';
 }
 
 function exportPng() {
@@ -484,18 +500,17 @@ function exportSvg() {
   }
 
   const cells = buildCellAssignments();
-  const viewWidth = paintCanvas.width;
-  const viewHeight = paintCanvas.height;
-
   const svgMarkup = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${viewWidth}" height="${viewHeight}" viewBox="0 0 ${viewWidth} ${viewHeight}">
+    <svg xmlns="http://www.w3.org/2000/svg" width="${paintCanvas.width}" height="${paintCanvas.height}" viewBox="0 0 ${paintCanvas.width} ${paintCanvas.height}">
       <rect width="100%" height="100%" fill="#FFFFFF" />
       ${cells
         .map((cell) => {
           const fontSize = Math.max(10, cell.width * 0.42);
+          const fill = cell.fill;
+          const textColor = (Number.parseInt(fill.slice(1, 3), 16) + Number.parseInt(fill.slice(3, 5), 16) + Number.parseInt(fill.slice(5, 7), 16)) / 3 > 180 ? '#121212' : '#F8FBFF';
           return `
-            <rect x="${cell.x}" y="${cell.y}" width="${cell.width}" height="${cell.height}" fill="${cell.fill}" stroke="rgba(25,36,46,0.25)" stroke-width="1" />
-            <text x="${cell.x + cell.width / 2}" y="${cell.y + cell.height / 2}" text-anchor="middle" dominant-baseline="middle" font-size="${fontSize}" font-family="Arial, sans-serif" font-weight="700" fill="${(Number.parseInt(cell.fill.slice(1, 3), 16) + Number.parseInt(cell.fill.slice(3, 5), 16) + Number.parseInt(cell.fill.slice(5, 7), 16)) / 3 > 180 ? '#121212' : '#F8FBFF'}">${cell.number}</text>
+            <rect x="${cell.x}" y="${cell.y}" width="${cell.width}" height="${cell.height}" fill="${fill}" stroke="rgba(25,36,46,0.25)" stroke-width="1" />
+            <text x="${cell.x + cell.width / 2}" y="${cell.y + cell.height / 2}" text-anchor="middle" dominant-baseline="middle" font-size="${fontSize}" font-family="Arial, sans-serif" font-weight="700" fill="${textColor}">${cell.number}</text>
           `;
         })
         .join('')}
@@ -515,11 +530,27 @@ function exportSvg() {
 function attachEventHandlers() {
   imageUpload.addEventListener('change', handleUpload);
 
+  dropZone.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    dropZone.classList.add('dragover');
+  });
+
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', handleDrop);
+
   templateSelect.addEventListener('change', (event) => {
     state.selectedTemplateId = event.target.value;
     state.customPalette = [...getTemplateById(state.selectedTemplateId).colors];
     renderCustomPalette();
     generatePaintSheet();
+  });
+
+  aspectRatioSelect.addEventListener('change', (event) => {
+    state.aspectRatio = event.target.value;
+    if (state.image) {
+      drawSourcePreview(state.image);
+      generatePaintSheet();
+    }
   });
 
   gridSizeInput.addEventListener('input', (event) => {
